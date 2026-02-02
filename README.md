@@ -37,5 +37,5 @@ Follow these steps to set up the project locally (e.g., on a new computer).
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/SharonZane01/connectly-socialmedia.git][(https://github.com/YOUR_USERNAME/connectly.git](https://github.com/SharonZane01/connectly-socialmedia.git))
+git clone [https://github.com/SharonZane01/connectly-socialmedia.git]
 cd connectly
