@@ -10,15 +10,23 @@ import random
 from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.permissions import IsAuthenticated
 from .serializers import UserSerializer
+from rest_framework.permissions import AllowAny
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
+from .serializers import UserSerializer
+from django.contrib.auth import get_user_model
+from rest_framework.generics import RetrieveAPIView
 
 User = get_user_model()
 
 class RegisterView(APIView):
+    permission_classes = [AllowAny] 
     def post(self, request):
         data = request.data
         email = data.get('email')
         password = data.get('password')
         full_name = data.get('full_name')
+        
 
         if not email or not password or not full_name:
             return Response({'error': 'All fields are required'}, status=400)
@@ -53,6 +61,7 @@ class RegisterView(APIView):
 
 
 class VerifyOTPView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
         email = request.data.get('email')
         otp_input = request.data.get('otp')
@@ -81,6 +90,15 @@ class VerifyOTPView(APIView):
         else:
             return Response({'error': 'Invalid OTP'}, status=400)
         
+
+class FindPeopleView(generics.ListAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Return all users EXCEPT the one logged in
+        return User.objects.exclude(id=self.request.user.id)
+        
 class UserProfileView(RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
@@ -91,3 +109,9 @@ class UserProfileView(RetrieveUpdateAPIView):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+class UserDetailView(RetrieveAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'

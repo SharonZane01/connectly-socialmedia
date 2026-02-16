@@ -1,10 +1,13 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import Profile from './pages/Profile';
-import VerifyEmail from './pages/VerifyEmail'; // <--- ADD THIS IMPORT
-import Navbar from './components/Navbar';
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Navbar from "./components/Navbar";
+
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import Profile from "./pages/Profile";
+import VerifyEmail from "./pages/VerifyEmail";
+import FindPeople from "./pages/FindPeople";
+import Chat from './pages/Chats';
 
 function App() {
   return (
@@ -17,6 +20,9 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/:id" element={<Profile />} />
+          <Route path="/find-people" element={<FindPeople />} />
+          <Route path="/chat" element={<Chat />} />
         </Routes>
       </div>
     </Router>

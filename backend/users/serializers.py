@@ -1,18 +1,36 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from posts.models import Follow
 
 User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
+    # 1. Password field (Write Only)
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    
+    # 2. Add this missing line for the 'get_is_following' method to work
+    is_following = serializers.SerializerMethodField()
+    followers_count = serializers.IntegerField(source='followers.count', read_only=True)
+    following_count = serializers.IntegerField(source='following.count', read_only=True)
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'full_name', 'password', 'profile_pic', 'bio']
+        # 3. Added 'password' to this list
+        fields = [
+            'id', 
+            'email', 
+            'full_name', 
+            'password', 
+            'profile_pic', 
+            'bio', 
+            'is_following', 
+            'followers_count', # <--- Make sure this is here
+            'following_count'  # <--- Make sure this is here
+        ]
+        read_only_fields = ['email', 'is_following', 'followers_count', 'following_count']
 
     def create(self, validated_data):
-        # We use .get(..., None) for profile_pic to avoid sending "" to a URLField
         user = User.objects.create_user(
             email=validated_data['email'],
             password=validated_data['password'],
@@ -21,17 +39,16 @@ class UserSerializer(serializers.ModelSerializer):
             bio=validated_data.get('bio', '')
         )
         return user
+    
+    def get_is_following(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return Follow.objects.filter(follower=request.user, following=obj).exists()
+        return False
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
-        # 1. Generate the standard token
         data = super().validate(attrs)
-        
-        # 2. Add extra user data to the response (Optional but useful)
         data['full_name'] = self.user.full_name
         data['email'] = self.user.email
-        
-        # REMOVED: "if not self.user.is_verified" 
-        # The crash happened here because the field was removed from the DB.
-        
         return data

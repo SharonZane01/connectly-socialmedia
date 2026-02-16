@@ -10,6 +10,7 @@ DEBUG = True
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -20,10 +21,13 @@ INSTALLED_APPS = [
     # Third Party
     'rest_framework',
     'corsheaders',
+    'channels',
     
     # Internal Apps
     'users',
     'posts',
+    'chat',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -57,7 +61,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'core.wsgi.application'
+ASGI_APPLICATION = 'core.asgi.application'
 
 DATABASES = {
     'default': {
@@ -114,3 +118,25 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = '9931bc002@smtp-brevo.com'  
 EMAIL_HOST_PASSWORD = 'pr6vSaPDzEA357Kw'
 DEFAULT_FROM_EMAIL = 'sharonzane798@gmail.com'
+
+# backend/core/settings.py
+
+REDIS_URL = os.environ.get("REDIS_URL")
+
+if REDIS_URL:
+    # Production (Render) - Use Redis
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+            },
+        },
+    }
+else:
+    # Development (Localhost) - Use In-Memory (No Redis needed!)
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
+        }
+    }
