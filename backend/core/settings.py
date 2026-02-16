@@ -10,7 +10,7 @@ DEBUG = os.environ.get("DEBUG", "False") == "True"
 ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
-    ".onrender.com",   # allows all render domains
+    "connectly-socialmedia.onrender.com",   # allows all render domains
 ]
 
 
@@ -97,8 +97,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    ".onrender.com",
+    "https://connectly-socialmedia.onrender.com",
 ]
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
