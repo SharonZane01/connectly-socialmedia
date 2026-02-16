@@ -5,9 +5,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-usve1*36x8kxt9q77m2o1otr64^$x_@)x)6jba%@5lvmy4%zql'
 DEBUG = True
+DEBUG = os.environ.get("DEBUG", "False") == "True"
 
-# Added 127.0.0.1 for local testing
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    ".onrender.com",   # allows all render domains
+]
+
 
 INSTALLED_APPS = [
     'daphne',
@@ -33,6 +38,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware', # Keep this at the top
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -91,6 +97,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    ".onrender.com",
 ]
 
 REST_FRAMEWORK = {
@@ -140,3 +147,7 @@ else:
             "BACKEND": "channels.layers.InMemoryChannelLayer"
         }
     }
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
