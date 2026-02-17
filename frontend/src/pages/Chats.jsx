@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
   Send, Search, MoreVertical, Smile, Paperclip,
-  Check, CheckCheck, Loader2, MessageSquare, ArrowLeft
+  Check, CheckCheck, Loader2, MessageSquare, ArrowLeft, Clock
 } from 'lucide-react';
 
 // ── Config ────────────────────────────────────────────────────
@@ -48,6 +48,17 @@ const Avatar = ({ user, size = 'md', online = false }) => {
   );
 };
 
+// NEW: Skeleton Loader for Sidebar
+const SkeletonUser = () => (
+  <div className="flex items-center gap-3 px-4 py-3 border-l-4 border-l-transparent animate-pulse">
+    <div className="w-12 h-12 bg-gray-200 rounded-full flex-shrink-0" />
+    <div className="flex-1 space-y-2">
+      <div className="h-4 bg-gray-200 rounded w-3/4" />
+      <div className="h-3 bg-gray-200 rounded w-1/2" />
+    </div>
+  </div>
+);
+
 const TypingBubble = () => (
   <div className="flex justify-start mt-1">
     <div className="bg-white rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-1">
@@ -65,6 +76,7 @@ const TypingBubble = () => (
 // ── Main Component ────────────────────────────────────────────
 const Chat = () => {
   const [users,           setUsers]           = useState([]);
+  const [isLoadingUsers,  setIsLoadingUsers]  = useState(true); // NEW: Loading state for sidebar
   const [activeUser,      setActiveUser]      = useState(null);
   const [messages,        setMessages]        = useState([]);
   const [newMessage,      setNewMessage]      = useState('');
@@ -75,7 +87,7 @@ const Chat = () => {
   const [isLoadingHistory,setIsLoadingHistory]= useState(false);
   const [searchQuery,     setSearchQuery]     = useState('');
   const [unreadCounts,    setUnreadCounts]    = useState({});
-  const [mobileView,      setMobileView]      = useState('list'); // 'list' | 'chat'
+  const [mobileView,      setMobileView]      = useState('list');
 
   const navigate         = useNavigate();
   const socketRef        = useRef(null);
@@ -92,19 +104,20 @@ const Chat = () => {
       if (!token) { navigate('/login'); return; }
       if (userStr) setCurrentUser(JSON.parse(userStr));
 
+      setIsLoadingUsers(true); // Start loading
       try {
         const res = await axios.get(
           `${API_BASE_URL}/api/users/find-people/`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         
-        // CRITICAL FIX: Handle Pagination vs Array
         const userList = Array.isArray(res.data) ? res.data : (res.data.results || []);
         setUsers(userList);
-        
       } catch (err) {
         console.error('Failed to load users:', err);
-        setUsers([]); // Fallback to empty to prevent map error
+        setUsers([]); 
+      } finally {
+        setIsLoadingUsers(false); // Stop loading
       }
     };
     init();
@@ -124,7 +137,6 @@ const Chat = () => {
           `${API_BASE_URL}/api/chat/${activeUser.id}/`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        // CRITICAL FIX: Handle Pagination vs Array for messages
         const msgList = Array.isArray(res.data) ? res.data : (res.data.results || []);
         setMessages(msgList);
         setUnreadCounts((p) => ({ ...p, [activeUser.id]: 0 }));
@@ -157,19 +169,43 @@ const Chat = () => {
       const data = JSON.parse(event.data);
       switch (data.type) {
         case 'message':
-          setMessages((p) => [...p, {
-            sender:    data.sender_id,
-            content:   data.message,
-            timestamp: new Date().toISOString(),
-            status:    'delivered',
-          }]);
-          scrollToBottom();
-          if (data.sender_id !== activeUser.id && data.sender_id !== currentUser.id) {
-            setUnreadCounts((p) => ({
-              ...p,
-              [data.sender_id]: (p[data.sender_id] || 0) + 1,
-            }));
+          // OPTIMISTIC MERGE:
+          // If message is from ME, find the pending one and update it to 'delivered'
+          if (data.sender_id === currentUser.id) {
+             setMessages((prev) => {
+                // Try to find a message that is 'sending' and has same content
+                const pendingIndex = prev.findIndex(m => m.status === 'sending' && m.content === data.message);
+                
+                if (pendingIndex !== -1) {
+                   const newArr = [...prev];
+                   newArr[pendingIndex] = { ...newArr[pendingIndex], status: 'delivered', timestamp: new Date().toISOString() };
+                   return newArr;
+                }
+                // If not found (rare), just append
+                return [...prev, {
+                   sender: data.sender_id,
+                   content: data.message,
+                   timestamp: new Date().toISOString(),
+                   status: 'delivered'
+                }];
+             });
+          } else {
+             // Message from OTHER user
+             setMessages((p) => [...p, {
+               sender:    data.sender_id,
+               content:   data.message,
+               timestamp: new Date().toISOString(),
+               status:    'delivered',
+             }]);
+             
+             if (data.sender_id !== activeUser.id) {
+               setUnreadCounts((p) => ({
+                 ...p,
+                 [data.sender_id]: (p[data.sender_id] || 0) + 1,
+               }));
+             }
           }
+          scrollToBottom();
           break;
 
         case 'typing':
@@ -208,13 +244,27 @@ const Chat = () => {
     };
   }, [activeUser, currentUser]);
 
-  // ── 3. Send ───────────────────────────────────────────────
+  // ── 3. Send (Optimistic Update) ───────────────────────────
   const handleSend = (e) => {
     e.preventDefault();
     if (!newMessage.trim() || socketRef.current?.readyState !== WebSocket.OPEN) return;
     
-    socketRef.current.send(JSON.stringify({ type: 'message', message: newMessage }));
+    const content = newMessage;
+    
+    // 1. Optimistic UI Update: Add message immediately with 'sending' status
+    const tempMsg = {
+       sender: currentUser.id,
+       content: content,
+       timestamp: new Date().toISOString(),
+       status: 'sending' // NEW STATUS
+    };
+    
+    setMessages(prev => [...prev, tempMsg]);
     setNewMessage('');
+    scrollToBottom();
+
+    // 2. Send to Server
+    socketRef.current.send(JSON.stringify({ type: 'message', message: content }));
     
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     inputRef.current?.focus();
@@ -280,7 +330,16 @@ const Chat = () => {
 
         {/* Contact List */}
         <div className="flex-1 overflow-y-auto">
-          {filteredUsers.length === 0 ? (
+          {isLoadingUsers ? (
+             // NEW: Loading Skeletons
+             <>
+               <SkeletonUser />
+               <SkeletonUser />
+               <SkeletonUser />
+               <SkeletonUser />
+               <SkeletonUser />
+             </>
+          ) : filteredUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm gap-2">
               <MessageSquare className="w-8 h-8 opacity-30" />
               <span>No conversations found</span>
@@ -409,13 +468,27 @@ const Chat = () => {
                           <p className="text-sm leading-relaxed break-words">{msg.content}</p>
                           {isLast && (
                             <div className={`flex items-center justify-end gap-1 mt-1 ${isMe ? 'opacity-80' : ''}`}>
-                              <span className={`text-[10px] ${isMe ? 'text-blue-100' : 'text-gray-400'}`}>
-                                {formatTime(msg.timestamp)}
-                              </span>
+                              {/* NEW: STATUS INDICATORS */}
                               {isMe && (
-                                msg.status === 'read'
-                                  ? <CheckCheck className="w-3 h-3 text-blue-200" />
-                                  : <Check      className="w-3 h-3 text-blue-200" />
+                                <>
+                                  {msg.status === 'sending' ? (
+                                     <>
+                                       <span className="text-[10px] text-blue-100 italic mr-1">Sending...</span>
+                                       <Clock className="w-3 h-3 text-blue-200 animate-pulse" />
+                                     </>
+                                  ) : (
+                                     <>
+                                       <span className="text-[10px] text-blue-100">{formatTime(msg.timestamp)}</span>
+                                       {msg.status === 'read'
+                                          ? <CheckCheck className="w-3 h-3 text-blue-200" />
+                                          : <Check      className="w-3 h-3 text-blue-200" />
+                                       }
+                                     </>
+                                  )}
+                                </>
+                              )}
+                              {!isMe && (
+                                <span className="text-[10px] text-gray-400">{formatTime(msg.timestamp)}</span>
                               )}
                             </div>
                           )}
