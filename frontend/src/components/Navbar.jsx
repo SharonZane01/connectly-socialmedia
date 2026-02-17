@@ -159,7 +159,7 @@ const Navbar = () => {
               {user && (
                 <>
                   <NavItem to="/find-people" icon={Compass} label="Discover" />
-                  <NavItem to="/messages" icon={MessageCircle} label="Messages" badge={0} />
+                  <NavItem to="/chat" icon={MessageCircle} label="Messages" badge={0} />
                   <NavItem to="/notifications" icon={Bell} label="Notifications" badge={notifications} />
                 </>
               )}
@@ -244,7 +244,7 @@ const Navbar = () => {
             <div className="flex justify-around items-center max-w-md mx-auto">
               <NavItem to="/" icon={Home} label="" />
               <NavItem to="/find-people" icon={Compass} label="" />
-              <NavItem to="/messages" icon={MessageCircle} label="" badge={0} />
+              <NavItem to="/chat" icon={MessageCircle} label="" badge={0} />
               <NavItem to="/notifications" icon={Bell} label="" badge={notifications} />
             </div>
           </div>

@@ -1,551 +1,486 @@
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Send, Search, Phone, Video, MoreVertical, Smile, Paperclip, Check, CheckCheck } from 'lucide-react';
+import {
+  Send, Search, MoreVertical, Smile, Paperclip,
+  Check, CheckCheck, Loader2, MessageSquare, ArrowLeft
+} from 'lucide-react';
 
+// ── Config (hardcoded like the working version) ───────────────
+const API_BASE_URL = 'https://connectly-socialmedia.onrender.com';
+const WS_BASE_URL  = 'wss://connectly-socialmedia.onrender.com';
+
+// ── Helpers ───────────────────────────────────────────────────
+const AVATAR_COLORS = [
+  'bg-blue-500', 'bg-violet-500', 'bg-emerald-500',
+  'bg-amber-500', 'bg-rose-500', 'bg-cyan-500',
+];
+
+const getAvatarColor = (id) =>
+  AVATAR_COLORS[((id ?? 0) % AVATAR_COLORS.length)];
+
+const getInitials = (name = '') =>
+  name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
+
+const formatTime = (ts) => {
+  if (!ts) return '';
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+// ── Sub-components ────────────────────────────────────────────
+const Avatar = ({ user, size = 'md', online = false }) => {
+  const dim =
+    size === 'sm' ? 'w-9  h-9  text-xs'  :
+    size === 'lg' ? 'w-12 h-12 text-base' :
+                   'w-10 h-10 text-sm';
+
+  return (
+    <div className="relative flex-shrink-0">
+      <div className={`${dim} rounded-full ${getAvatarColor(user?.id)} flex items-center justify-center font-semibold text-white overflow-hidden`}>
+        {user?.profile_pic
+          ? <img src={user.profile_pic} alt="" className="w-full h-full object-cover" />
+          : getInitials(user?.full_name)}
+      </div>
+      {online && (
+        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-white rounded-full" />
+      )}
+    </div>
+  );
+};
+
+const TypingBubble = () => (
+  <div className="flex justify-start mt-1">
+    <div className="bg-white rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-1">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
+          style={{ animationDelay: `${i * 0.15}s` }}
+        />
+      ))}
+    </div>
+  </div>
+);
+
+// ── Main ──────────────────────────────────────────────────────
 const Chat = () => {
-  const [users, setUsers] = useState([]);
-  const [activeUser, setActiveUser] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
-  const [typingUsers, setTypingUsers] = useState(new Set());
-  const [isTyping, setIsTyping] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [unreadCounts, setUnreadCounts] = useState({});
-  
-  const navigate = useNavigate();
-  const socketRef = useRef(null);
-  const scrollRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
-  const messageEndRef = useRef(null);
+  const [users,           setUsers]           = useState([]);
+  const [activeUser,      setActiveUser]      = useState(null);
+  const [messages,        setMessages]        = useState([]);
+  const [newMessage,      setNewMessage]      = useState('');
+  const [currentUser,     setCurrentUser]     = useState(null);
+  const [isConnected,     setIsConnected]     = useState(false);
+  const [onlineUsers,     setOnlineUsers]     = useState(new Set());
+  const [typingUsers,     setTypingUsers]     = useState(new Set());
+  const [isLoadingHistory,setIsLoadingHistory]= useState(false);
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [unreadCounts,    setUnreadCounts]    = useState({});
+  const [mobileView,      setMobileView]      = useState('list'); // 'list' | 'chat'
 
-  // 1. Initial Setup: Load My Info & User List
+  const navigate         = useNavigate();
+  const socketRef        = useRef(null);
+  const messageEndRef    = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const inputRef         = useRef(null);
+
+  // ── 1. Init: exactly mirrors working version ──────────────
   useEffect(() => {
     const init = async () => {
-      const token = localStorage.getItem('access_token');
+      const token   = localStorage.getItem('access_token');
       const userStr = localStorage.getItem('user');
 
-      if (!token) {
-          navigate('/login');
-          return;
-      }
-
-      if (userStr) {
-        setCurrentUser(JSON.parse(userStr));
-      }
+      if (!token) { navigate('/login'); return; }
+      if (userStr) setCurrentUser(JSON.parse(userStr));
 
       try {
-        const res = await axios.get('https://connectly-socialmedia.onrender.com/api/users/find-people/', {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        // ← same endpoint & header pattern as the working file
+        const res = await axios.get(
+          `${API_BASE_URL}/api/users/find-people/`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
         setUsers(res.data);
       } catch (err) {
-        console.error("Failed to load users:", err);
+        console.error('Failed to load users:', err);
       }
     };
     init();
   }, [navigate]);
 
-  // 2. Handle Active User Change (Fetch History + Connect WS)
+  // ── 2. Active user → fetch history + open WS ─────────────
   useEffect(() => {
     if (!activeUser || !currentUser) return;
 
     const token = localStorage.getItem('access_token');
 
-    // A. Fetch Chat History
+    // Fetch history — same endpoint as working version
     const fetchHistory = async () => {
+      setIsLoadingHistory(true);
       try {
-        const res = await axios.get(`https://connectly-socialmedia.onrender.com/api/chat/${activeUser.id}/`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await axios.get(
+          `${API_BASE_URL}/api/chat/${activeUser.id}/`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
         setMessages(res.data);
-        scrollToBottom();
-        
-        // Clear unread count for active user
-        setUnreadCounts(prev => ({ ...prev, [activeUser.id]: 0 }));
+        setUnreadCounts((p) => ({ ...p, [activeUser.id]: 0 }));
       } catch (err) {
-        console.error("Failed to fetch history:", err);
+        console.error('Failed to fetch history:', err);
+      } finally {
+        setIsLoadingHistory(false);
+        scrollToBottom();
       }
     };
     fetchHistory();
 
-    // B. Connect WebSocket
-    const wsUrl = `ws://127.0.0.1:8000/ws/chat/${activeUser.id}/?token=${token}`;
-    
-    if (socketRef.current) {
-        socketRef.current.close();
-    }
+    // WebSocket
+    if (socketRef.current) socketRef.current.close();
 
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(
+      `${WS_BASE_URL}/ws/chat/${activeUser.id}/?token=${token}`
+    );
     socketRef.current = ws;
 
     ws.onopen = () => {
-        console.log("WebSocket Connected");
-        setIsConnected(true);
-        
-        // Send presence notification
-        ws.send(JSON.stringify({ 
-          type: 'presence',
-          status: 'online'
-        }));
+      setIsConnected(true);
+      ws.send(JSON.stringify({ type: 'presence', status: 'online' }));
     };
-
-    ws.onclose = () => {
-        console.log("WebSocket Disconnected");
-        setIsConnected(false);
-    };
-
-    ws.onerror = (error) => {
-        console.error("WebSocket Error:", error);
-        setIsConnected(false);
-    };
+    ws.onclose = () => setIsConnected(false);
+    ws.onerror = () => setIsConnected(false);
 
     ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        
-        // Handle different message types
-        switch(data.type) {
-          case 'message':
-            setMessages(prev => [
-                ...prev,
-                {
-                    sender: data.sender_id,
-                    content: data.message,
-                    timestamp: new Date().toISOString(),
-                    status: 'delivered'
-                }
-            ]);
+      const data = JSON.parse(event.data);
+      switch (data.type) {
+        case 'message':
+          setMessages((p) => [...p, {
+            sender:    data.sender_id,
+            content:   data.message,
+            timestamp: new Date().toISOString(),
+            status:    'delivered',
+          }]);
+          scrollToBottom();
+          if (data.sender_id !== activeUser.id && data.sender_id !== currentUser.id) {
+            setUnreadCounts((p) => ({
+              ...p,
+              [data.sender_id]: (p[data.sender_id] || 0) + 1,
+            }));
+          }
+          break;
+
+        case 'typing':
+          if (data.user_id !== currentUser.id) {
+            setTypingUsers((p) => new Set(p).add(data.user_id));
+            setTimeout(() => {
+              setTypingUsers((p) => { const n = new Set(p); n.delete(data.user_id); return n; });
+            }, 3000);
+          }
+          break;
+
+        case 'presence':
+          if (data.status === 'online') {
+            setOnlineUsers((p) => new Set(p).add(data.user_id));
+          } else {
+            setOnlineUsers((p) => { const n = new Set(p); n.delete(data.user_id); return n; });
+          }
+          break;
+
+        // working version also handles 'read'
+        case 'read':
+          setMessages((p) =>
+            p.map((m) => m.sender === currentUser.id ? { ...m, status: 'read' } : m)
+          );
+          break;
+
+        // legacy fallback (same as working version)
+        default:
+          if (data.message) {
+            setMessages((p) => [...p, {
+              sender:    data.sender_id,
+              content:   data.message,
+              timestamp: new Date().toISOString(),
+            }]);
             scrollToBottom();
-            
-            // Update unread count if not active chat
-            if (data.sender_id !== currentUser?.id && data.sender_id !== activeUser?.id) {
-              setUnreadCounts(prev => ({
-                ...prev,
-                [data.sender_id]: (prev[data.sender_id] || 0) + 1
-              }));
-            }
-            break;
-            
-          case 'typing':
-            if (data.user_id !== currentUser?.id) {
-              setTypingUsers(prev => new Set(prev).add(data.user_id));
-              setTimeout(() => {
-                setTypingUsers(prev => {
-                  const next = new Set(prev);
-                  next.delete(data.user_id);
-                  return next;
-                });
-              }, 3000);
-            }
-            break;
-            
-          case 'presence':
-            if (data.status === 'online') {
-              setOnlineUsers(prev => new Set(prev).add(data.user_id));
-            } else {
-              setOnlineUsers(prev => {
-                const next = new Set(prev);
-                next.delete(data.user_id);
-                return next;
-              });
-            }
-            break;
-            
-          case 'read':
-            setMessages(prev => prev.map(msg => 
-              msg.sender === currentUser?.id ? { ...msg, status: 'read' } : msg
-            ));
-            break;
-            
-          default:
-            // Legacy message format support
-            setMessages(prev => [
-                ...prev,
-                {
-                    sender: data.sender_id,
-                    content: data.message,
-                    timestamp: new Date().toISOString()
-                }
-            ]);
-            scrollToBottom();
-        }
+          }
+          break;
+      }
     };
 
     return () => {
-        if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ 
-              type: 'presence',
-              status: 'offline'
-            }));
-            ws.close();
-        }
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'presence', status: 'offline' }));
+        ws.close();
+      }
     };
-
   }, [activeUser, currentUser]);
 
-  // 3. Send Message
+  // ── 3. Send ───────────────────────────────────────────────
   const handleSend = (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
-
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-        console.warn("WebSocket is not connected.");
-        return;
-    }
-
-    socketRef.current.send(JSON.stringify({ 
-      type: 'message',
-      message: newMessage 
-    }));
-    
-    // Stop typing indicator
-    setIsTyping(false);
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    
-    setNewMessage("");
+    if (!newMessage.trim() || socketRef.current?.readyState !== WebSocket.OPEN) return;
+    socketRef.current.send(JSON.stringify({ type: 'message', message: newMessage }));
+    setNewMessage('');
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    inputRef.current?.focus();
   };
 
-  // 4. Handle Typing Indicator
+  // ── 4. Typing ─────────────────────────────────────────────
   const handleTyping = (e) => {
     setNewMessage(e.target.value);
-    
-    if (!isTyping && socketRef.current?.readyState === WebSocket.OPEN) {
-      setIsTyping(true);
-      socketRef.current.send(JSON.stringify({ 
-        type: 'typing',
-        user_id: currentUser?.id
-      }));
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      if (!typingTimeoutRef.current) {
+        socketRef.current.send(JSON.stringify({ type: 'typing', user_id: currentUser?.id }));
+      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => { typingTimeoutRef.current = null; }, 2000);
     }
-    
-    // Clear existing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    
-    // Set new timeout to stop typing indicator
-    typingTimeoutRef.current = setTimeout(() => {
-      setIsTyping(false);
-    }, 2000);
   };
 
-  // 5. Auto Scroll
+  // ── 5. Misc helpers ───────────────────────────────────────
   const scrollToBottom = () => {
-    setTimeout(() => {
-        messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
+    setTimeout(() => { messageEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, 100);
   };
 
-  // 6. Filter Users
-  const filteredUsers = users.filter(u => 
+  const filteredUsers = users.filter((u) =>
     u.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // 7. Format Time
-  const formatTime = (timestamp) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now - date;
-    
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // Open chat — sets active user AND switches mobile view
+  const openChat = (u) => {
+    setActiveUser(u);
+    setMobileView('chat');
   };
 
+  const goBack = () => {
+    setMobileView('list');
+    // don't null activeUser — keeps WS alive until new one chosen
+  };
+
+  const isTyping = activeUser && typingUsers.has(activeUser.id);
+
+  // ── Render ────────────────────────────────────────────────
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100 pt-16">
-      
-      {/* LEFT SIDEBAR: User List */}
-      <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col shadow-lg">
-        
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700">
-            <h2 className="text-xl font-bold text-white mb-3">Messages</h2>
-            
-            {/* Search Bar */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input 
-                type="text"
-                placeholder="Search conversations..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-white/50 transition"
-              />
-            </div>
+    <div className="fixed inset-0 top-19 flex overflow-hidden bg-gray-100">
+
+      {/* ══ SIDEBAR ══════════════════════════════════════════════ */}
+      <aside className={`
+        flex flex-col bg-white border-r border-gray-200
+        w-full md:w-80 lg:w-96 flex-shrink-0
+        ${mobileView === 'list' ? 'flex' : 'hidden md:flex'}
+      `}>
+
+        {/* Sidebar header */}
+        <div className="flex-shrink-0 px-4 pt-5 pb-3 border-b border-gray-100">
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight mb-3">Messages</h1>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search conversations…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-gray-100 rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
+            />
+          </div>
         </div>
 
-        {/* User List */}
+        {/* Contact list */}
         <div className="flex-1 overflow-y-auto">
           {filteredUsers.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              <p>No users found</p>
+            <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm gap-2">
+              <MessageSquare className="w-8 h-8 opacity-30" />
+              <span>No conversations found</span>
             </div>
           ) : (
-            filteredUsers.map(u => {
+            filteredUsers.map((u) => {
               const isOnline = onlineUsers.has(u.id);
-              const unreadCount = unreadCounts[u.id] || 0;
-              
+              const unread   = unreadCounts[u.id] || 0;
+              const isActive = activeUser?.id === u.id;
+
               return (
-                <div 
-                    key={u.id} 
-                    onClick={() => setActiveUser(u)}
-                    className={`p-4 flex items-center cursor-pointer hover:bg-gray-50 transition-all duration-200 border-l-4 ${
-                      activeUser?.id === u.id 
-                        ? 'bg-blue-50 border-blue-600 shadow-inner' 
-                        : 'border-transparent'
-                    }`}
+                // ← div + onClick, exactly like the working version
+                <div
+                  key={u.id}
+                  onClick={() => openChat(u)}
+                  className={`
+                    flex items-center gap-3 px-4 py-3 cursor-pointer
+                    border-l-4 transition-colors select-none
+                    ${isActive
+                      ? 'bg-blue-50 border-l-blue-500'
+                      : 'border-l-transparent hover:bg-gray-50'}
+                  `}
                 >
-                    {/* Profile Picture with Online Status */}
-                    <div className="relative mr-4">
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center font-bold text-white overflow-hidden shadow-md">
-                          {u.profile_pic ? (
-                            <img src={u.profile_pic} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-lg">{u.full_name?.[0]?.toUpperCase()}</span>
-                          )}
-                      </div>
-                      {/* Online Indicator */}
-                      <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white transition-colors duration-300 ${
-                        isOnline ? 'bg-green-500' : 'bg-gray-400'
-                      }`}></div>
+                  <Avatar user={u} size="lg" online={isOnline} />
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-sm truncate ${isActive ? 'font-semibold text-blue-700' : 'font-medium text-gray-900'}`}>
+                        {u.full_name}
+                      </span>
+                      {unread > 0 && (
+                        <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-blue-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center">
+                          {unread > 99 ? '99+' : unread}
+                        </span>
+                      )}
                     </div>
-                    
-                    {/* User Info */}
-                    <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-baseline">
-                          <h3 className="font-semibold text-gray-900 truncate">{u.full_name}</h3>
-                          {unreadCount > 0 && (
-                            <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full animate-pulse">
-                              {unreadCount}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 flex items-center">
-                          <span className={`w-2 h-2 rounded-full mr-1.5 ${isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                          {isOnline ? 'Online' : 'Offline'}
-                        </p>
-                    </div>
+                    <p className={`text-xs mt-0.5 font-medium ${isOnline ? 'text-emerald-500' : 'text-gray-400'}`}>
+                      {isOnline ? '● Online' : '○ Offline'}
+                    </p>
+                  </div>
                 </div>
               );
             })
           )}
         </div>
-      </div>
+      </aside>
 
-      {/* RIGHT: Chat Area */}
-      <div className="w-2/3 flex flex-col">
+      {/* ══ CHAT PANEL ═══════════════════════════════════════════ */}
+      <main className={`
+        flex-1 flex flex-col overflow-hidden min-w-0
+        ${mobileView === 'chat' ? 'flex' : 'hidden md:flex'}
+      `}>
         {activeUser ? (
-            <>
-                {/* Chat Header */}
-                <div className="p-4 bg-white border-b border-gray-200 flex items-center justify-between shadow-md z-10">
-                    <div className="flex items-center">
-                      {/* Profile Picture */}
-                      <div className="relative mr-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center font-bold text-white overflow-hidden">
-                            {activeUser.profile_pic ? (
-                              <img src={activeUser.profile_pic} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              activeUser.full_name?.[0]?.toUpperCase()
-                            )}
-                        </div>
-                        <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                          onlineUsers.has(activeUser.id) ? 'bg-green-500' : 'bg-gray-400'
-                        }`}></div>
-                      </div>
-                      
-                      <div>
-                        <h2 className="font-bold text-lg text-gray-900">{activeUser.full_name}</h2>
-                        <p className="text-xs text-gray-500">
-                          {typingUsers.has(activeUser.id) ? (
-                            <span className="text-blue-600 font-medium animate-pulse">typing...</span>
-                          ) : onlineUsers.has(activeUser.id) ? (
-                            'Active now'
-                          ) : (
-                            'Offline'
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-3">
-                      <button className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200">
-                        <Phone className="w-5 h-5 text-gray-600" />
-                      </button>
-                      <button className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200">
-                        <Video className="w-5 h-5 text-gray-600" />
-                      </button>
-                      <button className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200">
-                        <MoreVertical className="w-5 h-5 text-gray-600" />
-                      </button>
-                      
-                      {/* Connection Status Badge */}
-                      <div className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-300 ${
-                        isConnected 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-red-100 text-red-700'
-                      }`}>
-                        <span className={`w-2 h-2 rounded-full ${
-                          isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-                        }`}></span>
-                        {isConnected ? 'Connected' : 'Connecting...'}
-                      </div>
-                    </div>
-                </div>
+          <>
+            {/* Chat header */}
+            <header className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shadow-sm z-10">
+              <button
+                onClick={goBack}
+                className="md:hidden p-1.5 -ml-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition"
+                aria-label="Back"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
 
-                {/* Messages List */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-50 to-white">
-                    {messages.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                        <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mb-4">
-                          <Send className="w-10 h-10 text-gray-400" />
-                        </div>
-                        <p className="text-lg font-medium">No messages yet</p>
-                        <p className="text-sm">Send a message to start the conversation</p>
-                      </div>
-                    ) : (
-                      messages.map((msg, index) => {
-                        const isMe = msg.sender === currentUser?.id;
-                        const showTimestamp = index === 0 || 
-                          new Date(msg.timestamp) - new Date(messages[index - 1].timestamp) > 300000; // 5 minutes
-                        
-                        return (
-                            <div key={index} className="animate-fadeIn">
-                              {/* Timestamp Divider */}
-                              {showTimestamp && (
-                                <div className="flex justify-center my-4">
-                                  <span className="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">
-                                    {formatTime(msg.timestamp)}
-                                  </span>
-                                </div>
+              <Avatar user={activeUser} size="md" online={onlineUsers.has(activeUser.id)} />
+
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-semibold text-gray-900 truncate leading-tight">
+                  {activeUser.full_name}
+                </p>
+                <p className="text-xs mt-0.5 h-4 leading-tight">
+                  {isTyping ? (
+                    <span className="text-blue-500 font-medium animate-pulse">typing…</span>
+                  ) : onlineUsers.has(activeUser.id) ? (
+                    <span className="text-emerald-500 font-medium">Online</span>
+                  ) : (
+                    <span className="text-gray-400">Offline</span>
+                  )}
+                </p>
+              </div>
+
+              {/* Connection dot */}
+              <div className={`w-2 h-2 rounded-full mr-1 ${isConnected ? 'bg-emerald-400' : 'bg-red-400'}`} title={isConnected ? 'Connected' : 'Disconnected'} />
+
+              <button className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition" aria-label="Options">
+                <MoreVertical className="w-5 h-5" />
+              </button>
+            </header>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-4 space-y-0.5 bg-gray-50">
+              {isLoadingHistory ? (
+                <div className="flex justify-center items-center h-full">
+                  <Loader2 className="w-7 h-7 animate-spin text-gray-400" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                  <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+                    <MessageSquare className="w-7 h-7 text-blue-400" />
+                  </div>
+                  <p className="text-sm font-semibold text-gray-600">No messages yet</p>
+                  <p className="text-xs text-gray-400">Say hello to {activeUser.full_name} 👋</p>
+                </div>
+              ) : (
+                <>
+                  {messages.map((msg, i) => {
+                    const isMe    = msg.sender === currentUser?.id;
+                    const prevMsg = messages[i - 1];
+                    const nextMsg = messages[i + 1];
+                    const isFirst = !prevMsg || prevMsg.sender !== msg.sender;
+                    const isLast  = !nextMsg || nextMsg.sender !== msg.sender;
+
+                    return (
+                      <div
+                        key={i}
+                        className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${isFirst ? 'mt-3' : 'mt-0.5'}`}
+                      >
+                        <div className={`
+                          relative max-w-[80%] sm:max-w-[65%] px-3.5 py-2 shadow-sm
+                          ${isMe
+                            ? `bg-blue-500 text-white
+                               ${isFirst ? 'rounded-t-2xl'   : 'rounded-t-md'}
+                               ${isLast  ? 'rounded-bl-2xl rounded-br-sm' : 'rounded-b-md'}`
+                            : `bg-white text-gray-800
+                               ${isFirst ? 'rounded-t-2xl'   : 'rounded-t-md'}
+                               ${isLast  ? 'rounded-br-2xl rounded-bl-sm' : 'rounded-b-md'}`
+                          }
+                        `}>
+                          <p className="text-sm leading-relaxed break-words">{msg.content}</p>
+                          {isLast && (
+                            <div className={`flex items-center justify-end gap-1 mt-1 ${isMe ? 'opacity-80' : ''}`}>
+                              <span className={`text-[10px] ${isMe ? 'text-blue-100' : 'text-gray-400'}`}>
+                                {formatTime(msg.timestamp)}
+                              </span>
+                              {isMe && (
+                                msg.status === 'read'
+                                  ? <CheckCheck className="w-3 h-3 text-blue-200" />
+                                  : <Check      className="w-3 h-3 text-blue-200" />
                               )}
-                              
-                              {/* Message Bubble */}
-                              <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} group`}>
-                                  <div className={`relative max-w-xs px-4 py-2 rounded-2xl shadow-md transition-all duration-200 hover:shadow-lg ${
-                                      isMe 
-                                        ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-none' 
-                                        : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'
-                                  }`}>
-                                      <p className="break-words">{msg.content}</p>
-                                      
-                                      {/* Message Status for sent messages */}
-                                      {isMe && (
-                                        <div className="flex items-center justify-end gap-1 mt-1">
-                                          <span className="text-xs opacity-70">
-                                            {new Date(msg.timestamp).toLocaleTimeString('en-US', { 
-                                              hour: 'numeric', 
-                                              minute: '2-digit' 
-                                            })}
-                                          </span>
-                                          {msg.status === 'read' ? (
-                                            <CheckCheck className="w-3 h-3 text-blue-200" />
-                                          ) : (
-                                            <Check className="w-3 h-3 text-blue-200" />
-                                          )}
-                                        </div>
-                                      )}
-                                  </div>
-                              </div>
                             </div>
-                        );
-                      })
-                    )}
-                    
-                    {/* Typing Indicator */}
-                    {typingUsers.has(activeUser.id) && (
-                      <div className="flex justify-start">
-                        <div className="bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-bl-none px-4 py-3 shadow-md">
-                          <div className="flex gap-1">
-                            <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                            <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                            <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                          </div>
+                          )}
                         </div>
                       </div>
-                    )}
-                    
-                    <div ref={messageEndRef}></div>
-                </div>
+                    );
+                  })}
 
-                {/* Input Area */}
-                <form onSubmit={handleSend} className="p-4 bg-white border-t border-gray-200 shadow-lg">
-                    <div className="flex items-center gap-3">
-                        {/* Emoji Button */}
-                        <button 
-                          type="button"
-                          className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
-                        >
-                          <Smile className="w-5 h-5 text-gray-500" />
-                        </button>
-                        
-                        {/* Attachment Button */}
-                        <button 
-                          type="button"
-                          className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
-                        >
-                          <Paperclip className="w-5 h-5 text-gray-500" />
-                        </button>
-                        
-                        {/* Message Input */}
-                        <input 
-                            type="text" 
-                            className="flex-1 border border-gray-300 rounded-full px-5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                            placeholder="Type a message..."
-                            value={newMessage}
-                            onChange={handleTyping}
-                            disabled={!isConnected}
-                        />
-                        
-                        {/* Send Button */}
-                        <button 
-                          type="submit" 
-                          disabled={!isConnected || !newMessage.trim()} 
-                          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-3 rounded-full font-bold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95"
-                        >
-                          <Send className="w-5 h-5" />
-                        </button>
-                    </div>
-                    
-                    {/* Typing Indicator for Current User */}
-                    {isTyping && (
-                      <p className="text-xs text-gray-400 mt-2 ml-14 animate-pulse">You are typing...</p>
-                    )}
-                </form>
-            </>
-        ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gradient-to-br from-gray-50 to-white">
-                <div className="w-32 h-32 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mb-6 shadow-lg">
-                  <Send className="w-16 h-16 text-blue-400" />
-                </div>
-                <h3 className="text-2xl font-bold text-gray-600 mb-2">Welcome to Chat</h3>
-                <p className="text-gray-400">Select a conversation to start messaging</p>
+                  {isTyping && <TypingBubble />}
+                </>
+              )}
+              <div ref={messageEndRef} />
             </div>
-        )}
-      </div>
 
-      <style jsx>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
-      `}</style>
+            {/* Input bar */}
+            <form
+              onSubmit={handleSend}
+              className="flex-shrink-0 flex items-center gap-2 px-3 py-3 bg-white border-t border-gray-200"
+            >
+              <button type="button" className="flex-shrink-0 p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition" aria-label="Emoji">
+                <Smile className="w-5 h-5" />
+              </button>
+              <button type="button" className="flex-shrink-0 p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition" aria-label="Attach">
+                <Paperclip className="w-5 h-5" />
+              </button>
+
+              <input
+                ref={inputRef}
+                type="text"
+                value={newMessage}
+                onChange={handleTyping}
+                disabled={!isConnected}
+                placeholder={isConnected ? 'Type a message…' : 'Connecting…'}
+                autoComplete="off"
+                className="flex-1 min-w-0 bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition disabled:opacity-50"
+              />
+
+              <button
+                type="submit"
+                disabled={!newMessage.trim() || !isConnected}
+                aria-label="Send message"
+                className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-blue-500 hover:bg-blue-600 active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-full transition-all shadow-sm"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          </>
+        ) : (
+          <div className="hidden md:flex flex-1 flex-col items-center justify-center gap-4 bg-gray-50 text-center px-8">
+            <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center">
+              <MessageSquare className="w-10 h-10 text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-700">Your Messages</h2>
+              <p className="text-sm text-gray-400 mt-1">Select a conversation to start chatting</p>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 };

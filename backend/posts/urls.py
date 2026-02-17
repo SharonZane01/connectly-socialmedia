@@ -1,10 +1,18 @@
 from django.urls import path
-from .views import CommentListCreateView, PostListCreateView, like_post, PostDetailView, toggle_follow # <--- Import PostDetailView
+from . import views
 
 urlpatterns = [
-    path('', PostListCreateView.as_view(), name='post-list-create'),
-    path('<int:pk>/like/', like_post, name='like-post'),
-    path('<int:pk>/', PostDetailView.as_view(), name='post-delete'), # <--- NEW
-    path('<int:post_id>/comments/', CommentListCreateView.as_view(), name='post-comments'),
-    path('follow/<int:user_id>/', toggle_follow, name='toggle-follow'), # <--- Follow Action
+    # Post URLs
+    path('posts/', views.PostListCreateView.as_view(), name='post-list'),
+    path('posts/<int:pk>/', views.PostDetailView.as_view(), name='post-detail'),
+
+    # Comment URLs
+    path('posts/<int:post_id>/comments/', views.CommentListCreateView.as_view(), name='post-comments'),
+
+    # Action URLs
+    path('posts/<int:pk>/like/', views.like_post, name='post-like'),
+    path('posts/<int:pk>/save/', views.toggle_save, name='post-save'),
+    
+    # User Follow URL
+    path('users/<int:user_id>/follow/', views.toggle_follow, name='user-follow'),
 ]
