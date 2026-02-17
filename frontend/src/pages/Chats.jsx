@@ -38,7 +38,7 @@ const Chat = () => {
       }
 
       try {
-        const res = await axios.get('http://127.0.0.1:8000/api/users/find-people/', {
+        const res = await axios.get('https://connectly-socialmedia.onrender.com/api/users/find-people/', {
             headers: { Authorization: `Bearer ${token}` }
         });
         setUsers(res.data);
@@ -58,7 +58,7 @@ const Chat = () => {
     // A. Fetch Chat History
     const fetchHistory = async () => {
       try {
-        const res = await axios.get(`http://127.0.0.1:8000/api/chat/${activeUser.id}/`, {
+        const res = await axios.get(`https://connectly-socialmedia.onrender.com/api/chat/${activeUser.id}/`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         setMessages(res.data);

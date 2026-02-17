@@ -66,7 +66,7 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated, user }) => {
       const token = localStorage.getItem("access_token");
 
       await axios.post(
-        "http://127.0.0.1:8000/api/posts/",
+        "https://connectly-socialmedia.onrender.com/api/posts/",
         {
           caption: caption,
           media_url: mediaUrl,

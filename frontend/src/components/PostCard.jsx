@@ -81,7 +81,7 @@ const PostCard = ({ post, user }) => {
 
     try {
       const token = localStorage.getItem('access_token');
-      await axios.post(`http://127.0.0.1:8000/api/posts/${post.id}/like/`, {}, {
+      await axios.post(`https://connectly-socialmedia.onrender.com/api/posts/${post.id}/like/`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
     } catch (err) {
@@ -102,7 +102,7 @@ const PostCard = ({ post, user }) => {
 
     try {
       const token = localStorage.getItem('access_token');
-      await axios.post(`http://127.0.0.1:8000/api/posts/${post.id}/save/`, {}, {
+      await axios.post(`https://connectly-socialmedia.onrender.com/api/posts/${post.id}/save/`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
     } catch (err) {
@@ -116,7 +116,7 @@ const PostCard = ({ post, user }) => {
       // Fetch comments only when opening
       try {
         const token = localStorage.getItem('access_token');
-        const res = await axios.get(`http://127.0.0.1:8000/api/posts/${post.id}/comments/`, {
+        const res = await axios.get(`https://connectly-socialmedia.onrender.com/api/posts/${post.id}/comments/`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         setComments(res.data);
@@ -133,7 +133,7 @@ const PostCard = ({ post, user }) => {
 
     try {
       const token = localStorage.getItem('access_token');
-      const res = await axios.post(`http://127.0.0.1:8000/api/posts/${post.id}/comments/`, 
+      const res = await axios.post(`https://connectly-socialmedia.onrender.com/api/posts/${post.id}/comments/`, 
         { content: newComment }, 
         { headers: { Authorization: `Bearer ${token}` }}
       );
