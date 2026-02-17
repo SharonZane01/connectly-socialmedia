@@ -6,7 +6,7 @@ import {
   Check, CheckCheck, Loader2, MessageSquare, ArrowLeft
 } from 'lucide-react';
 
-// ── Config (hardcoded like the working version) ───────────────
+// ── Config ────────────────────────────────────────────────────
 const API_BASE_URL = 'https://connectly-socialmedia.onrender.com';
 const WS_BASE_URL  = 'wss://connectly-socialmedia.onrender.com';
 
@@ -62,7 +62,7 @@ const TypingBubble = () => (
   </div>
 );
 
-// ── Main ──────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────
 const Chat = () => {
   const [users,           setUsers]           = useState([]);
   const [activeUser,      setActiveUser]      = useState(null);
@@ -83,7 +83,7 @@ const Chat = () => {
   const typingTimeoutRef = useRef(null);
   const inputRef         = useRef(null);
 
-  // ── 1. Init: exactly mirrors working version ──────────────
+  // ── 1. Init: Load User & Contact List ──────────────────────
   useEffect(() => {
     const init = async () => {
       const token   = localStorage.getItem('access_token');
@@ -93,26 +93,30 @@ const Chat = () => {
       if (userStr) setCurrentUser(JSON.parse(userStr));
 
       try {
-        // ← same endpoint & header pattern as the working file
         const res = await axios.get(
           `${API_BASE_URL}/api/users/find-people/`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        setUsers(res.data);
+        
+        // CRITICAL FIX: Handle Pagination vs Array
+        const userList = Array.isArray(res.data) ? res.data : (res.data.results || []);
+        setUsers(userList);
+        
       } catch (err) {
         console.error('Failed to load users:', err);
+        setUsers([]); // Fallback to empty to prevent map error
       }
     };
     init();
   }, [navigate]);
 
-  // ── 2. Active user → fetch history + open WS ─────────────
+  // ── 2. Active user → fetch history + open WS ──────────────
   useEffect(() => {
     if (!activeUser || !currentUser) return;
 
     const token = localStorage.getItem('access_token');
 
-    // Fetch history — same endpoint as working version
+    // Fetch history
     const fetchHistory = async () => {
       setIsLoadingHistory(true);
       try {
@@ -120,10 +124,13 @@ const Chat = () => {
           `${API_BASE_URL}/api/chat/${activeUser.id}/`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        setMessages(res.data);
+        // CRITICAL FIX: Handle Pagination vs Array for messages
+        const msgList = Array.isArray(res.data) ? res.data : (res.data.results || []);
+        setMessages(msgList);
         setUnreadCounts((p) => ({ ...p, [activeUser.id]: 0 }));
       } catch (err) {
         console.error('Failed to fetch history:', err);
+        setMessages([]); 
       } finally {
         setIsLoadingHistory(false);
         scrollToBottom();
@@ -131,7 +138,7 @@ const Chat = () => {
     };
     fetchHistory();
 
-    // WebSocket
+    // WebSocket Connection
     if (socketRef.current) socketRef.current.close();
 
     const ws = new WebSocket(
@@ -182,23 +189,13 @@ const Chat = () => {
           }
           break;
 
-        // working version also handles 'read'
         case 'read':
           setMessages((p) =>
             p.map((m) => m.sender === currentUser.id ? { ...m, status: 'read' } : m)
           );
           break;
 
-        // legacy fallback (same as working version)
         default:
-          if (data.message) {
-            setMessages((p) => [...p, {
-              sender:    data.sender_id,
-              content:   data.message,
-              timestamp: new Date().toISOString(),
-            }]);
-            scrollToBottom();
-          }
           break;
       }
     };
@@ -215,8 +212,10 @@ const Chat = () => {
   const handleSend = (e) => {
     e.preventDefault();
     if (!newMessage.trim() || socketRef.current?.readyState !== WebSocket.OPEN) return;
+    
     socketRef.current.send(JSON.stringify({ type: 'message', message: newMessage }));
     setNewMessage('');
+    
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     inputRef.current?.focus();
   };
@@ -233,7 +232,7 @@ const Chat = () => {
     }
   };
 
-  // ── 5. Misc helpers ───────────────────────────────────────
+  // ── 5. Helpers ────────────────────────────────────────────
   const scrollToBottom = () => {
     setTimeout(() => { messageEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, 100);
   };
@@ -242,7 +241,6 @@ const Chat = () => {
     u.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Open chat — sets active user AND switches mobile view
   const openChat = (u) => {
     setActiveUser(u);
     setMobileView('chat');
@@ -250,14 +248,13 @@ const Chat = () => {
 
   const goBack = () => {
     setMobileView('list');
-    // don't null activeUser — keeps WS alive until new one chosen
   };
 
   const isTyping = activeUser && typingUsers.has(activeUser.id);
 
   // ── Render ────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 top-19 flex overflow-hidden bg-gray-100">
+    <div className="fixed inset-0 top-16 flex overflow-hidden bg-gray-100">
 
       {/* ══ SIDEBAR ══════════════════════════════════════════════ */}
       <aside className={`
@@ -266,7 +263,7 @@ const Chat = () => {
         ${mobileView === 'list' ? 'flex' : 'hidden md:flex'}
       `}>
 
-        {/* Sidebar header */}
+        {/* Sidebar Header */}
         <div className="flex-shrink-0 px-4 pt-5 pb-3 border-b border-gray-100">
           <h1 className="text-xl font-bold text-gray-900 tracking-tight mb-3">Messages</h1>
           <div className="relative">
@@ -281,7 +278,7 @@ const Chat = () => {
           </div>
         </div>
 
-        {/* Contact list */}
+        {/* Contact List */}
         <div className="flex-1 overflow-y-auto">
           {filteredUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm gap-2">
@@ -295,7 +292,6 @@ const Chat = () => {
               const isActive = activeUser?.id === u.id;
 
               return (
-                // ← div + onClick, exactly like the working version
                 <div
                   key={u.id}
                   onClick={() => openChat(u)}
@@ -338,12 +334,11 @@ const Chat = () => {
       `}>
         {activeUser ? (
           <>
-            {/* Chat header */}
+            {/* Chat Header */}
             <header className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shadow-sm z-10">
               <button
                 onClick={goBack}
                 className="md:hidden p-1.5 -ml-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition"
-                aria-label="Back"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -365,15 +360,14 @@ const Chat = () => {
                 </p>
               </div>
 
-              {/* Connection dot */}
               <div className={`w-2 h-2 rounded-full mr-1 ${isConnected ? 'bg-emerald-400' : 'bg-red-400'}`} title={isConnected ? 'Connected' : 'Disconnected'} />
 
-              <button className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition" aria-label="Options">
+              <button className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition">
                 <MoreVertical className="w-5 h-5" />
               </button>
             </header>
 
-            {/* Messages */}
+            {/* Messages Area */}
             <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-4 space-y-0.5 bg-gray-50">
               {isLoadingHistory ? (
                 <div className="flex justify-center items-center h-full">
@@ -436,15 +430,15 @@ const Chat = () => {
               <div ref={messageEndRef} />
             </div>
 
-            {/* Input bar */}
+            {/* Input Bar */}
             <form
               onSubmit={handleSend}
               className="flex-shrink-0 flex items-center gap-2 px-3 py-3 bg-white border-t border-gray-200"
             >
-              <button type="button" className="flex-shrink-0 p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition" aria-label="Emoji">
+              <button type="button" className="flex-shrink-0 p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition">
                 <Smile className="w-5 h-5" />
               </button>
-              <button type="button" className="flex-shrink-0 p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition" aria-label="Attach">
+              <button type="button" className="flex-shrink-0 p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition">
                 <Paperclip className="w-5 h-5" />
               </button>
 
@@ -462,7 +456,6 @@ const Chat = () => {
               <button
                 type="submit"
                 disabled={!newMessage.trim() || !isConnected}
-                aria-label="Send message"
                 className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-blue-500 hover:bg-blue-600 active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-full transition-all shadow-sm"
               >
                 <Send className="w-4 h-4" />
