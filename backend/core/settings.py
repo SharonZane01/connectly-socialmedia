@@ -119,13 +119,7 @@ SIMPLE_JWT = {
 # ==============================================================================
 # EMAIL CONFIGURATION (BREVO)
 # ==============================================================================
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp-relay.brevo.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = '9931bc002@smtp-brevo.com'  
-EMAIL_HOST_PASSWORD = 'pr6vSaPDzEA357Kw'
-DEFAULT_FROM_EMAIL = 'sharonzane798@gmail.com'
+
 
 # backend/core/settings.py
 
