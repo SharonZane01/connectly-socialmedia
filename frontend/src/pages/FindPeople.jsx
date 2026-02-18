@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { Search, UserPlus, UserCheck, Users, Loader2 } from 'lucide-react';
 
-const API_BASE = "https://connectly-socialmedia.onrender.com/api";
+const API_BASE = "https://connectly-socialmedia-production.up.railway.app/api";
 
 const FindPeople = () => {
   const [users, setUsers] = useState([]);

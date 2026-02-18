@@ -36,8 +36,8 @@ const Profile = () => {
 
       try {
         let endpoint = isMe 
-          ? 'https://connectly-socialmedia.onrender.com/api/users/profile/' 
-          : `https://connectly-socialmedia.onrender.com/api/users/${id}/`; // You might need to create this endpoint if it doesn't exist, see note below*
+          ? 'https://connectly-socialmedia-production.up.railway.app/api/users/profile/' 
+          : `https://connectly-socialmedia-production.up.railway.app/api/users/${id}/`; // You might need to create this endpoint if it doesn't exist, see note below*
 
         // *Quick Fix for now: Use the 'find-people' list to get data if standard endpoint fails, 
         // OR better: Update backend to allow fetching specific user.
@@ -48,7 +48,7 @@ const Profile = () => {
         // Let's try the cleanest approach: Re-using the profile view if it's me.
         
         if (isMe) {
-            const res = await axios.get('https://connectly-socialmedia.onrender.com/api/users/profile/', {
+            const res = await axios.get('https://connectly-socialmedia-production.up.railway.app/api/users/profile/', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setProfileUser(res.data);
@@ -59,7 +59,7 @@ const Profile = () => {
             // NOTE: We need to ensure we have an endpoint for this. 
             // If not, we can use the "Find People" endpoint and filter (temporary) or build a DetailView (proper).
             // Let's assume we build the proper view in Step 2.
-            const res = await axios.get(`https://connectly-socialmedia.onrender.com/api/users/profile/${id}/`, {
+            const res = await axios.get(`https://connectly-socialmedia-production.up.railway.app/api/users/profile/${id}/`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setProfileUser(res.data);
@@ -67,7 +67,7 @@ const Profile = () => {
         }
 
         // Fetch Posts
-        const postRes = await axios.get('https://connectly-socialmedia.onrender.com/api/posts/', {
+        const postRes = await axios.get('https://connectly-socialmedia-production.up.railway.app/api/posts/', {
             headers: { Authorization: `Bearer ${token}` }
         });
         
@@ -95,7 +95,7 @@ const Profile = () => {
     setIsFollowing(!isFollowing);
     try {
         const token = localStorage.getItem('access_token');
-        await axios.post(`https://connectly-socialmedia.onrender.com/api/posts/follow/${id}/`, {}, {
+        await axios.post(`https://connectly-socialmedia-production.up.railway.app/api/posts/follow/${id}/`, {}, {
             headers: { Authorization: `Bearer ${token}` }
         });
     } catch (err) {
@@ -107,7 +107,7 @@ const Profile = () => {
   const handleSaveProfile = async () => {
     const token = localStorage.getItem('access_token');
     try {
-        const res = await axios.patch('https://connectly-socialmedia.onrender.com/api/users/profile/', 
+        const res = await axios.patch('https://connectly-socialmedia-production.up.railway.app/api/users/profile/', 
             { full_name: newName, bio: newBio },
             { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -138,7 +138,7 @@ const Profile = () => {
         
         // Send URL to Backend
         const token = localStorage.getItem('access_token');
-        const res = await axios.patch('https://connectly-socialmedia.onrender.com/api/users/profile/', 
+        const res = await axios.patch('https://connectly-socialmedia-production.up.railway.app/api/users/profile/', 
             { profile_pic: cloudData.secure_url },
             { headers: { Authorization: `Bearer ${token}` } }
         );

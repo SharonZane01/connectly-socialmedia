@@ -33,7 +33,7 @@ const PostCard = ({ post, user }) => {
   const videoRef = useRef(null);
 
   // Constants
-  const API_URL = 'https://connectly-socialmedia.onrender.com';
+  const API_URL = 'https://connectly-socialmedia-production.up.railway.app';
   // Robust check for video type
   const isVideo = post.media_type === 'video' || (post.media_url && post.media_url.match(/\.(mp4|webm|ogg|mov)$/i));
 

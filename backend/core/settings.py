@@ -14,7 +14,8 @@ ALLOWED_HOSTS = [
     "localhost",
     "connectly-socialmedia.onrender.com",
     "connectly-socialmedia.netlify.app",
-    "connectly-socialmedia.vercel.app",  # allows all render domains
+    "connectly-socialmedia.vercel.app",
+    "connectly-socialmedia-production.up.railway.app"  
 ]
 
 
@@ -104,12 +105,14 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://connectly-socialmedia.onrender.com",
-    "https://connectly-socialmedia.netlify.app",   # allows all render domains
+    "https://connectly-socialmedia.netlify.app",
+    "https://connectly-socialmedia-production.up.railway.app",   # allows all render domains
 ]
 CSRF_TRUSTED_ORIGINS = [
     "https://connectly-socialmedia.onrender.com",
     "https://connectly-socialmedia.netlify.app", 
-     "https://connectly-socialmedia.vercel.app", # ✅ Add this
+     "https://connectly-socialmedia.vercel.app",
+      "https://connectly-socialmedia-production.up.railway.app", # ✅ Add this
 ]
 
 

@@ -16,7 +16,7 @@ import CreatePostModal from '../components/CreatePostModal';
 import PostCard from '../components/PostCard';
 
 
-const API_BASE = "https://connectly-socialmedia.onrender.com/api";
+const API_BASE = "https://connectly-socialmedia-production.up.railway.app/api";
 
 const api = axios.create({
   baseURL: API_BASE,

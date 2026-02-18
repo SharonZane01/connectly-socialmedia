@@ -4,7 +4,7 @@ import { useNavigate, Link } from "react-router-dom";
 import toast, { Toaster } from 'react-hot-toast';
 import { Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
 
-const API_URL = "https://connectly-socialmedia.onrender.com/api/users/login/";
+const API_URL = "https://connectly-socialmedia-production.up.railway.app/api/users/login/";
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });

@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 
 // ── Config ────────────────────────────────────────────────────
-const API_BASE_URL = 'https://connectly-socialmedia.onrender.com';
-const WS_BASE_URL  = 'wss://connectly-socialmedia.onrender.com';
+const API_BASE_URL = 'https://connectly-socialmedia-production.up.railway.app';
+const WS_BASE_URL  = 'wss://connectly-socialmedia-production.up.railway.app';
 
 // ── Helpers ───────────────────────────────────────────────────
 const AVATAR_COLORS = [
